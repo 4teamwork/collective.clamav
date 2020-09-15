@@ -6,6 +6,7 @@ from plone.registry.interfaces import IRegistry
 from six import BytesIO
 from zope.annotation.interfaces import IAnnotations
 from zope.component import getUtility
+from zope.globalrequest import getRequest
 from zope.interface import implements, Invalid
 
 from collective.clamav.interfaces import IAVScanner
@@ -53,6 +54,10 @@ class ClamavValidator:
         # Get a previous scan result on this REQUEST if there is one - to
         # avoid scanning the same upload twice.
         request = kwargs['REQUEST']
+        if not request:
+            # Not very modern, but plone.restapi's DeserializeFromJson doesn't
+            # pass the request object to archetype validators
+            request = getRequest()
         annotations = IAnnotations(request)
         scan_result = annotations.get(SCAN_RESULT_KEY, None)
         if scan_result is not None:
