@@ -67,3 +67,6 @@ class IAVScanner(Interface):
 
     def scanBuffer(buffer):
         pass
+
+    def scanStream(buffer):
+        pass

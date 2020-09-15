@@ -42,12 +42,17 @@ class ClamavScanner(object):
     def scanBuffer(self, buffer, type, **kwargs):
         """Scans a buffer for viruses
         """
+        return self.scanStream(BytesIO(buffer), type, **kwargs)
+
+    def scanStream(self, stream, type, **kwargs):
+        """Scans a stream for viruses
+        """
 
         timeout = kwargs.get('timeout', 120.0)
         kwargs_copy = dict(kwargs)
         kwargs_copy.update(timeout=timeout)
         cd = _make_clamd(type, **kwargs_copy)
-        status = cd.instream(BytesIO(buffer))
+        status = cd.instream(stream)
 
         if status["stream"][0] == "FOUND":
             return status["stream"][1]
