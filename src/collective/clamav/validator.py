@@ -56,9 +56,12 @@ class ClamavValidator:
             # when submitted a new 'file_value' is a
             # 'ZPublisher.HTTPRequest.FileUpload'
 
-            if getattr(value, '_validate_isVirusFree', False):
-                # validation is called multiple times for the same file upload
-                return True
+            prev_scan_result = getattr(value, '_validate_isVirusFree', None)
+            if prev_scan_result is not None:
+                # validation is called in mutator (setFile()) to *ensure*
+                # we never miss it, but the results are more user friendly if
+                # they are returned from validation code
+                return prev_scan_result
 
             file_value.seek(0)
             # TODO this reads the entire file into memory, there should be
@@ -73,6 +76,7 @@ class ClamavValidator:
                        "viruses: Please contact your system administrator."
 
             if result:
+                value._validate_isVirusFree = False
                 return "Validation failed, file is virus-infected. (%s)" % \
                        (result)
             else:
