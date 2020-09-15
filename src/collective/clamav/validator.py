@@ -3,6 +3,7 @@ import logging
 
 from Products.validation.interfaces.IValidator import IValidator
 from plone.registry.interfaces import IRegistry
+from six import BytesIO
 from zope.annotation.interfaces import IAnnotations
 from zope.component import getUtility
 from zope.interface import implements, Invalid
@@ -15,7 +16,7 @@ logger = logging.getLogger('collective.clamav')
 SCAN_RESULT_KEY = 'collective.clamav.scan_result'
 
 
-def _scanBuffer(buffer):
+def scanStream(stream):
 
     registry = getUtility(IRegistry)
     settings = registry.forInterface(IAVScannerSettings, check=False)
@@ -24,17 +25,20 @@ def _scanBuffer(buffer):
     scanner = getUtility(IAVScanner)
 
     if settings.clamav_connection == 'net':
-        result = scanner.scanBuffer(
-            buffer, 'net',
+        result = scanner.scanStream(
+            stream, 'net',
             host=settings.clamav_host,
             port=int(settings.clamav_port),
             timeout=float(settings.clamav_timeout))
     else:
-        result = scanner.scanBuffer(buffer, 'socket',
+        result = scanner.scanStream(stream, 'socket',
                                     socketpath=settings.clamav_socket,
                                     timeout=float(settings.clamav_timeout))
-
     return result
+
+
+def _scanBuffer(buffer):
+    scanStream(BytesIO(buffer))
 
 
 class ClamavValidator:
@@ -54,39 +58,36 @@ class ClamavValidator:
         if scan_result is not None:
             return scan_result
 
-        if hasattr(value, 'getBlob'):
+        if hasattr(value, 'seek'):
+            # when submitted a new 'value' is a
+            # 'ZPublisher.HTTPRequest.FileUpload'
+            filelike = value
+        elif hasattr(value, 'getBlob'):
             # the value can be a plone.app.blob.field.BlobWrapper
             # in which case we open the blob file to provide a file interface
             # as used for FileUpload
-            file_value = value.getBlob().open()
+            filelike = value.getBlob().open()
+        elif value:
+            filelike = BytesIO(value)
         else:
-            file_value = value
+            # value is falsy - assume we kept existing file
+            return True
 
-        if hasattr(file_value, 'seek'):
-            # when submitted a new 'file_value' is a
-            # 'ZPublisher.HTTPRequest.FileUpload'
+        filelike.seek(0)
+        result = ''
+        try:
+            result = scanStream(filelike)
+        except ScanError as e:
+            logger.error('ScanError %s on %s.' % (e, filelike.filename))
+            return "There was an error while checking the file for " \
+                   "viruses: Please contact your system administrator."
 
-            file_value.seek(0)
-            # TODO this reads the entire file into memory, there should be
-            # a smarter way to do this
-            content = file_value.read()
-            result = ''
-            try:
-                result = _scanBuffer(content)
-            except ScanError as e:
-                logger.error('ScanError %s on %s.' % (e, file_value.filename))
-                return "There was an error while checking the file for " \
-                       "viruses: Please contact your system administrator."
-
-            if result:
-                annotations[SCAN_RESULT_KEY] = False
-                return "Validation failed, file is virus-infected. (%s)" % \
-                       (result)
-            else:
-                annotations[SCAN_RESULT_KEY] = True
-                return True
+        if result:
+            annotations[SCAN_RESULT_KEY] = False
+            return "Validation failed, file is virus-infected. (%s)" % \
+                   (result)
         else:
-            # if we kept existing file
+            annotations[SCAN_RESULT_KEY] = True
             return True
 
 
@@ -113,7 +114,7 @@ else:
             # a smarter way to do this
             result = ''
             try:
-                result = _scanBuffer(value.data)
+                result = scanStream(filelike)
             except ScanError as e:
                 logger.error('ScanError %s on %s.' % (e, value.filename))
                 raise Invalid("There was an error while checking "
