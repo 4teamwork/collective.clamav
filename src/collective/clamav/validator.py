@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
 import logging
 
-import Globals
 from Products.validation.interfaces.IValidator import IValidator
 from plone.registry.interfaces import IRegistry
+from zope.annotation.interfaces import IAnnotations
 from zope.component import getUtility
 from zope.interface import implements, Invalid
+
 from collective.clamav.interfaces import IAVScanner
 from collective.clamav.scanner import ScanError
 from collective.clamav.interfaces import IAVScannerSettings
 
 logger = logging.getLogger('collective.clamav')
+SCAN_RESULT_KEY = 'collective.clamav.scan_result'
 
 
 def _scanBuffer(buffer):
@@ -44,6 +46,14 @@ class ClamavValidator:
         self.name = name
 
     def __call__(self, value, *args, **kwargs):
+        # Get a previous scan result on this REQUEST if there is one - to
+        # avoid scanning the same upload twice.
+        request = kwargs['REQUEST']
+        annotations = IAnnotations(request)
+        scan_result = annotations.get(SCAN_RESULT_KEY, None)
+        if scan_result is not None:
+            return scan_result
+
         if hasattr(value, 'getBlob'):
             # the value can be a plone.app.blob.field.BlobWrapper
             # in which case we open the blob file to provide a file interface
@@ -55,13 +65,6 @@ class ClamavValidator:
         if hasattr(file_value, 'seek'):
             # when submitted a new 'file_value' is a
             # 'ZPublisher.HTTPRequest.FileUpload'
-
-            prev_scan_result = getattr(value, '_validate_isVirusFree', None)
-            if prev_scan_result is not None:
-                # validation is called in mutator (setFile()) to *ensure*
-                # we never miss it, but the results are more user friendly if
-                # they are returned from validation code
-                return prev_scan_result
 
             file_value.seek(0)
             # TODO this reads the entire file into memory, there should be
@@ -76,12 +79,11 @@ class ClamavValidator:
                        "viruses: Please contact your system administrator."
 
             if result:
-                value._validate_isVirusFree = False
+                annotations[SCAN_RESULT_KEY] = False
                 return "Validation failed, file is virus-infected. (%s)" % \
                        (result)
             else:
-                # mark the file upload instance as already checked
-                value._validate_isVirusFree = True
+                annotations[SCAN_RESULT_KEY] = True
                 return True
         else:
             # if we kept existing file
