@@ -106,12 +106,29 @@ else:
         def validate(self, value):
             super(Z3CFormclamavValidator, self).validate(value)
 
-            if getattr(value, '_validate_isVirusFree', False) or value is None:
-                # validation is called multiple times for the same file upload
-                return
+            # Get a previous scan result on this REQUEST if there is one - to
+            # avoid scanning the same upload twice.
+            annotations = IAnnotations(self.request)
+            scan_result = annotations.get(SCAN_RESULT_KEY, None)
+            if scan_result is not None:
+                return scan_result
 
-            # TODO this reads the entire file into memory, there should be
-            # a smarter way to do this
+            if hasattr(value, 'seek'):
+                # when submitted a new 'value' is a
+                # 'ZPublisher.HTTPRequest.FileUpload'
+                filelike = value
+            elif hasattr(value, 'open'):
+                # the value can be a NamedBlobFile / NamedBlobImage
+                # in which case we open the blob file to provide a file interface
+                # as used for FileUpload
+                filelike = value.open()
+            elif value:
+                filelike = BytesIO(value)
+            else:
+                # value is falsy - assume we kept existing file
+                return True
+
+            filelike.seek(0)
             result = ''
             try:
                 result = scanStream(filelike)
@@ -122,12 +139,13 @@ else:
                               "contact your system administrator.")
 
             if result:
+                annotations[SCAN_RESULT_KEY] = False
                 raise Invalid("Validation failed, file "
                               "is virus-infected. (%s)" %
                               (result))
             else:
-                # mark the file instance as already checked
-                value._validate_isVirusFree = True
+                annotations[SCAN_RESULT_KEY] = True
+                return True
 
     validator.WidgetValidatorDiscriminators(Z3CFormclamavValidator,
                                             field=INamedField,
