@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from six import BytesIO
 from zope.component import getUtility
 
 from collective.clamav.interfaces import IAVScanner
@@ -94,6 +95,53 @@ class TestScanner(unittest.TestCase):
             ScanError,
             self.scanner.scanBuffer,
             ('Not a virus', ),
+            {'type': 'socket',
+             'socketpath': '/tmp/clamd.socket',
+             'timeout': 1.0e-16})
+
+    def test_net_scanStream(self):
+        """ Try a virus through the net using scanStream.
+        Shouldn't be any different to using scanBuffer
+        """
+
+        self.assertEquals(
+            self.scanner.scanStream(BytesIO(EICAR), type='net'),
+            'Win.Test.EICAR_HDB-1')
+
+        # And a normal file...
+        self.assertEquals(
+            self.scanner.scanStream(BytesIO('Not a virus'), type='net'),
+            None)
+
+        # Test timeout
+        self.assertRaises(
+            ScanError,
+            self.scanner.scanStream,
+            (BytesIO('Not a virus'), ),
+            {'type': 'net', 'timeout': 1.0e-16})
+
+    def test_unix_socket_scanStream(self):
+        """ Try a virus through a unix socket using scanStream.
+        """
+
+        self.assertEquals(
+            self.scanner.scanStream(
+                BytesIO(EICAR), type='socket',
+                socketpath='/tmp/clamd.socket'),
+            'Win.Test.EICAR_HDB-1')
+
+        # And a normal file...
+        self.assertEquals(
+            self.scanner.scanStream(
+                BytesIO('Not a virus'), type='socket',
+                socketpath='/tmp/clamd.socket'
+            ), None)
+
+        # Test timeout
+        self.assertRaises(
+            ScanError,
+            self.scanner.scanStream,
+            (BytesIO('Not a virus'), ),
             {'type': 'socket',
              'socketpath': '/tmp/clamd.socket',
              'timeout': 1.0e-16})
