@@ -14,9 +14,6 @@ logger = logging.getLogger('collective.clamav')
 
 
 def _scanBuffer(buffer):
-    if Globals.DevelopmentMode:  # pragma: no cover
-        logger.warn('Skipping virus scan in development mode.')
-        return ''
 
     registry = getUtility(IRegistry)
     settings = registry.forInterface(IAVScannerSettings, check=False)
@@ -47,23 +44,31 @@ class ClamavValidator:
         self.name = name
 
     def __call__(self, value, *args, **kwargs):
-        if hasattr(value, 'seek'):
-            # when submitted a new file 'value' is a
+        if hasattr(value, 'getBlob'):
+            # the value can be a plone.app.blob.field.BlobWrapper
+            # in which case we open the blob file to provide a file interface
+            # as used for FileUpload
+            file_value = value.getBlob().open()
+        else:
+            file_value = value
+
+        if hasattr(file_value, 'seek'):
+            # when submitted a new 'file_value' is a
             # 'ZPublisher.HTTPRequest.FileUpload'
 
             if getattr(value, '_validate_isVirusFree', False):
                 # validation is called multiple times for the same file upload
                 return True
 
-            value.seek(0)
+            file_value.seek(0)
             # TODO this reads the entire file into memory, there should be
             # a smarter way to do this
-            content = value.read()
+            content = file_value.read()
             result = ''
             try:
                 result = _scanBuffer(content)
             except ScanError as e:
-                logger.error('ScanError %s on %s.' % (e, value.filename))
+                logger.error('ScanError %s on %s.' % (e, file_value.filename))
                 return "There was an error while checking the file for " \
                        "viruses: Please contact your system administrator."
 
