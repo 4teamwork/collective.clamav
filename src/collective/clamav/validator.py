@@ -88,12 +88,12 @@ class ClamavValidator:
                    "viruses: Please contact your system administrator."
 
         if result:
-            annotations[SCAN_RESULT_KEY] = False
-            return "Validation failed, file is virus-infected. (%s)" % \
-                   (result)
+            annotations[SCAN_RESULT_KEY] = (
+                "Validation failed, file is virus-infected. (%s)" % result
+            )
         else:
             annotations[SCAN_RESULT_KEY] = True
-            return True
+        return annotations[SCAN_RESULT_KEY]
 
 
 try:
@@ -144,10 +144,10 @@ else:
                               "contact your system administrator.")
 
             if result:
-                annotations[SCAN_RESULT_KEY] = False
-                raise Invalid("Validation failed, file "
-                              "is virus-infected. (%s)" %
-                              (result))
+                annotations[SCAN_RESULT_KEY] = (
+                    "Validation failed, file is virus-infected. (%s)" % result
+                )
+                raise Invalid(annotations[SCAN_RESULT_KEY])
             else:
                 annotations[SCAN_RESULT_KEY] = True
                 return True
