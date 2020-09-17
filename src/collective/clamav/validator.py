@@ -13,7 +13,8 @@ from collective.clamav.interfaces import IAVScanner
 from collective.clamav.scanner import ScanError
 from collective.clamav.interfaces import IAVScannerSettings
 
-logger = logging.getLogger('collective.clamav')
+logger = logging.getLogger('collective.clamav.uploads')
+
 SCAN_RESULT_KEY = 'collective.clamav.scan_result'
 
 
@@ -61,19 +62,23 @@ class ClamavValidator:
         annotations = IAnnotations(request)
         scan_result = annotations.get(SCAN_RESULT_KEY, None)
         if scan_result is not None:
+            logger.debug("File already scanned in this request")
             return scan_result
 
         if hasattr(value, 'seek'):
             # when submitted a new 'value' is a
             # 'ZPublisher.HTTPRequest.FileUpload'
             filelike = value
+            filename = filelike.filename
         elif hasattr(value, 'getBlob'):
             # the value can be a plone.app.blob.field.BlobWrapper
             # in which case we open the blob file to provide a file interface
             # as used for FileUpload
             filelike = value.getBlob().open()
+            filename = filelike.filename
         elif value:
             filelike = BytesIO(value)
+            filename = '<stream>'
         else:
             # value is falsy - assume we kept existing file
             return True
@@ -83,7 +88,7 @@ class ClamavValidator:
         try:
             result = scanStream(filelike)
         except ScanError as e:
-            logger.error('ScanError %s on %s.' % (e, filelike.filename))
+            logger.error('ScanError %s on %s.' % (e, filename))
             return "There was an error while checking the file for " \
                    "viruses: Please contact your system administrator."
 
@@ -91,8 +96,14 @@ class ClamavValidator:
             annotations[SCAN_RESULT_KEY] = (
                 "Validation failed, file is virus-infected. (%s)" % result
             )
+            logger.warning("{} filename: {}".format(
+                annotations[SCAN_RESULT_KEY],
+                filename
+            ))
         else:
             annotations[SCAN_RESULT_KEY] = True
+            logger.info("No virus detected in {}".format(filename))
+
         return annotations[SCAN_RESULT_KEY]
 
 
@@ -116,19 +127,23 @@ else:
             annotations = IAnnotations(self.request)
             scan_result = annotations.get(SCAN_RESULT_KEY, None)
             if scan_result is not None:
+                logger.debug("File already scanned in this request")
                 return scan_result
 
             if hasattr(value, 'seek'):
                 # when submitted a new 'value' is a
                 # 'ZPublisher.HTTPRequest.FileUpload'
                 filelike = value
+                filename = filelike.filename
             elif hasattr(value, 'open'):
                 # the value can be a NamedBlobFile / NamedBlobImage
                 # in which case we open the blob file to provide a file interface
                 # as used for FileUpload
                 filelike = value.open()
+                filename = value.filename
             elif value:
                 filelike = BytesIO(value)
+                filename = '<stream>'
             else:
                 # value is falsy - assume we kept existing file
                 return True
@@ -138,7 +153,7 @@ else:
             try:
                 result = scanStream(filelike)
             except ScanError as e:
-                logger.error('ScanError %s on %s.' % (e, value.filename))
+                logger.error('ScanError %s on %s.' % (e, filename))
                 raise Invalid("There was an error while checking "
                               "the file for viruses: Please "
                               "contact your system administrator.")
@@ -147,9 +162,14 @@ else:
                 annotations[SCAN_RESULT_KEY] = (
                     "Validation failed, file is virus-infected. (%s)" % result
                 )
+                logger.warning("{} filename: {}".format(
+                    annotations[SCAN_RESULT_KEY],
+                    filename
+                ))
                 raise Invalid(annotations[SCAN_RESULT_KEY])
             else:
                 annotations[SCAN_RESULT_KEY] = True
+                logger.info("No virus detected in {}".format(filename))
                 return True
 
     validator.WidgetValidatorDiscriminators(Z3CFormclamavValidator,
