@@ -39,7 +39,7 @@ def scanStream(stream):
 
 
 def _scanBuffer(buffer):
-    scanStream(BytesIO(buffer))
+    return scanStream(BytesIO(buffer))
 
 
 class ClamavValidator:
