@@ -69,13 +69,13 @@ class ClamavValidator:
             # when submitted a new 'value' is a
             # 'ZPublisher.HTTPRequest.FileUpload'
             filelike = value
-            filename = filelike.filename
+            filename = filelike.filename if hasattr(filelike, 'filename') else '<not known>'
         elif hasattr(value, 'getBlob'):
             # the value can be a plone.app.blob.field.BlobWrapper
             # in which case we open the blob file to provide a file interface
             # as used for FileUpload
             filelike = value.getBlob().open()
-            filename = filelike.filename
+            filename = filelike.filename if hasattr(filelike, 'filename') else '<not known>'
         elif value:
             filelike = BytesIO(value)
             filename = '<stream>'
@@ -83,6 +83,8 @@ class ClamavValidator:
             # value is falsy - assume we kept existing file
             return True
 
+        if isinstance(filename, unicode):
+            filename = filename.encode('utf-8')
         filelike.seek(0)
         result = ''
         try:
@@ -134,13 +136,13 @@ else:
                 # when submitted a new 'value' is a
                 # 'ZPublisher.HTTPRequest.FileUpload'
                 filelike = value
-                filename = filelike.filename
+                filename = filelike.filename if hasattr(filelike, 'filename') else '<not known>'
             elif hasattr(value, 'open'):
                 # the value can be a NamedBlobFile / NamedBlobImage
                 # in which case we open the blob file to provide a file interface
                 # as used for FileUpload
                 filelike = value.open()
-                filename = value.filename
+                filename = filelike.filename if hasattr(filelike, 'filename') else '<not known>'
             elif value:
                 filelike = BytesIO(value)
                 filename = '<stream>'
@@ -148,6 +150,8 @@ else:
                 # value is falsy - assume we kept existing file
                 return True
 
+            if isinstance(filename, unicode):
+                filename = filename.encode('utf-8')
             filelike.seek(0)
             result = ''
             try:
