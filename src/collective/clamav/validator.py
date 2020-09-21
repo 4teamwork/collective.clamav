@@ -7,6 +7,7 @@ from six import BytesIO
 from zope.annotation.interfaces import IAnnotations
 from zope.component import getUtility
 from zope.globalrequest import getRequest
+from zope.i18n import translate
 from zope.interface import implements, Invalid
 
 from collective.clamav import _
@@ -97,10 +98,12 @@ class ClamavValidator:
                      u"viruses: Please contact your system administrator.")
 
         if result:
-            annotations[SCAN_RESULT_KEY] = _(
-                u'validation_failed',
-                default=u"Validation failed, file is virus-infected. (${result})",
-                mapping={u"result": result}
+            annotations[SCAN_RESULT_KEY] = translate(_(
+                    u'validation_failed',
+                    default=u"Validation failed, file is virus-infected. (${result})",
+                    mapping={u"result": result}
+                ),
+                context=request
             )
             logger.warning("{} filename: {}".format(
                 annotations[SCAN_RESULT_KEY],
@@ -169,10 +172,12 @@ else:
                 )
 
             if result:
-                annotations[SCAN_RESULT_KEY] = _(
-                    u'validation_failed',
-                    default=u"Validation failed, file is virus-infected. (${result})",
-                    mapping={u"result": result}
+                annotations[SCAN_RESULT_KEY] = translate(_(
+                        u'validation_failed',
+                        default=u"Validation failed, file is virus-infected. (${result})",
+                        mapping={u"result": result}
+                    ),
+                    context=self.request
                 )
                 logger.warning("{} filename: {}".format(
                     annotations[SCAN_RESULT_KEY],
