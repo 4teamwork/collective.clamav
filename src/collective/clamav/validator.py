@@ -9,6 +9,7 @@ from zope.component import getUtility
 from zope.globalrequest import getRequest
 from zope.interface import implements, Invalid
 
+from collective.clamav import _
 from collective.clamav.interfaces import IAVScanner
 from collective.clamav.scanner import ScanError
 from collective.clamav.interfaces import IAVScannerSettings
@@ -91,12 +92,15 @@ class ClamavValidator:
             result = scanStream(filelike)
         except ScanError as e:
             logger.error('ScanError %s on %s.' % (e, filename))
-            return "There was an error while checking the file for " \
-                   "viruses: Please contact your system administrator."
+            return _(u'error_while_scanning',
+                     default=u"There was an error while checking the file for " 
+                     u"viruses: Please contact your system administrator.")
 
         if result:
-            annotations[SCAN_RESULT_KEY] = (
-                "Validation failed, file is virus-infected. (%s)" % result
+            annotations[SCAN_RESULT_KEY] = _(
+                u'validation_failed',
+                default=u"Validation failed, file is virus-infected. (${result})",
+                mapping={u"result": result}
             )
             logger.warning("{} filename: {}".format(
                 annotations[SCAN_RESULT_KEY],
@@ -158,13 +162,17 @@ else:
                 result = scanStream(filelike)
             except ScanError as e:
                 logger.error('ScanError %s on %s.' % (e, filename))
-                raise Invalid("There was an error while checking "
-                              "the file for viruses: Please "
-                              "contact your system administrator.")
+                raise Invalid(
+                    _(u'error_while_scanning',
+                      default="There was an error while checking the file for "
+                              "viruses: Please contact your system administrator.")
+                )
 
             if result:
-                annotations[SCAN_RESULT_KEY] = (
-                    "Validation failed, file is virus-infected. (%s)" % result
+                annotations[SCAN_RESULT_KEY] = _(
+                    u'validation_failed',
+                    default=u"Validation failed, file is virus-infected. (${result})",
+                    mapping={u"result": result}
                 )
                 logger.warning("{} filename: {}".format(
                     annotations[SCAN_RESULT_KEY],
