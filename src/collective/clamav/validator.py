@@ -7,13 +7,16 @@ from six import BytesIO
 from zope.annotation.interfaces import IAnnotations
 from zope.component import getUtility
 from zope.globalrequest import getRequest
+from zope.i18n import translate
 from zope.interface import implements, Invalid
 
+from collective.clamav import _
 from collective.clamav.interfaces import IAVScanner
 from collective.clamav.scanner import ScanError
 from collective.clamav.interfaces import IAVScannerSettings
 
-logger = logging.getLogger('collective.clamav')
+logger = logging.getLogger('collective.clamav.uploads')
+
 SCAN_RESULT_KEY = 'collective.clamav.scan_result'
 
 
@@ -61,38 +64,55 @@ class ClamavValidator:
         annotations = IAnnotations(request)
         scan_result = annotations.get(SCAN_RESULT_KEY, None)
         if scan_result is not None:
+            logger.debug("File already scanned in this request")
             return scan_result
 
         if hasattr(value, 'seek'):
             # when submitted a new 'value' is a
             # 'ZPublisher.HTTPRequest.FileUpload'
             filelike = value
+            filename = filelike.filename if hasattr(filelike, 'filename') else '<not known>'
         elif hasattr(value, 'getBlob'):
             # the value can be a plone.app.blob.field.BlobWrapper
             # in which case we open the blob file to provide a file interface
             # as used for FileUpload
             filelike = value.getBlob().open()
+            filename = filelike.filename if hasattr(filelike, 'filename') else '<not known>'
         elif value:
             filelike = BytesIO(value)
+            filename = '<stream>'
         else:
             # value is falsy - assume we kept existing file
             return True
 
+        if isinstance(filename, unicode):
+            filename = filename.encode('utf-8')
         filelike.seek(0)
         result = ''
         try:
             result = scanStream(filelike)
         except ScanError as e:
-            logger.error('ScanError %s on %s.' % (e, filelike.filename))
-            return "There was an error while checking the file for " \
-                   "viruses: Please contact your system administrator."
+            logger.error('ScanError %s on %s.' % (e, filename))
+            return _(u'error_while_scanning',
+                     default=u"There was an error while checking the file for " 
+                     u"viruses: Please contact your system administrator.")
 
         if result:
-            annotations[SCAN_RESULT_KEY] = (
-                "Validation failed, file is virus-infected. (%s)" % result
+            annotations[SCAN_RESULT_KEY] = translate(_(
+                    u'validation_failed',
+                    default=u"Validation failed, file is virus-infected. (${result})",
+                    mapping={u"result": result}
+                ),
+                context=request
             )
+            logger.warning("{} filename: {}".format(
+                annotations[SCAN_RESULT_KEY],
+                filename
+            ))
         else:
             annotations[SCAN_RESULT_KEY] = True
+            logger.info("No virus detected in {}".format(filename))
+
         return annotations[SCAN_RESULT_KEY]
 
 
@@ -116,40 +136,57 @@ else:
             annotations = IAnnotations(self.request)
             scan_result = annotations.get(SCAN_RESULT_KEY, None)
             if scan_result is not None:
+                logger.debug("File already scanned in this request")
                 return scan_result
 
             if hasattr(value, 'seek'):
                 # when submitted a new 'value' is a
                 # 'ZPublisher.HTTPRequest.FileUpload'
                 filelike = value
+                filename = filelike.filename if hasattr(filelike, 'filename') else '<not known>'
             elif hasattr(value, 'open'):
                 # the value can be a NamedBlobFile / NamedBlobImage
                 # in which case we open the blob file to provide a file interface
                 # as used for FileUpload
                 filelike = value.open()
+                filename = filelike.filename if hasattr(filelike, 'filename') else '<not known>'
             elif value:
                 filelike = BytesIO(value)
+                filename = '<stream>'
             else:
                 # value is falsy - assume we kept existing file
                 return True
 
+            if isinstance(filename, unicode):
+                filename = filename.encode('utf-8')
             filelike.seek(0)
             result = ''
             try:
                 result = scanStream(filelike)
             except ScanError as e:
-                logger.error('ScanError %s on %s.' % (e, value.filename))
-                raise Invalid("There was an error while checking "
-                              "the file for viruses: Please "
-                              "contact your system administrator.")
+                logger.error('ScanError %s on %s.' % (e, filename))
+                raise Invalid(
+                    _(u'error_while_scanning',
+                      default="There was an error while checking the file for "
+                              "viruses: Please contact your system administrator.")
+                )
 
             if result:
-                annotations[SCAN_RESULT_KEY] = (
-                    "Validation failed, file is virus-infected. (%s)" % result
+                annotations[SCAN_RESULT_KEY] = translate(_(
+                        u'validation_failed',
+                        default=u"Validation failed, file is virus-infected. (${result})",
+                        mapping={u"result": result}
+                    ),
+                    context=self.request
                 )
+                logger.warning("{} filename: {}".format(
+                    annotations[SCAN_RESULT_KEY],
+                    filename
+                ))
                 raise Invalid(annotations[SCAN_RESULT_KEY])
             else:
                 annotations[SCAN_RESULT_KEY] = True
+                logger.info("No virus detected in {}".format(filename))
                 return True
 
     validator.WidgetValidatorDiscriminators(Z3CFormclamavValidator,

@@ -67,6 +67,8 @@ class MockAVScanner(object):
 
     implements(IAVScanner)
 
+    uses = 0
+
     def ping(self, type, **kwargs):
         """
         """
@@ -75,6 +77,7 @@ class MockAVScanner(object):
     def scanStream(self, stream, type, **kwargs):
         """
         """
+        self.uses += 1
         if EICAR in stream.read():
             return 'Eicar-Test-Signature FOUND'
         return None

@@ -1,10 +1,7 @@
-# --- PLEASE EDIT THE LINES BELOW CORRECTLY ---
-# SOME DESCRIPTIVE TITLE.
-# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
 msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
-"POT-Creation-Date: 2020-09-21 15:49+0000\n"
+"POT-Creation-Date: YEAR-MO-DA HO:MI +ZONE\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI +ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -15,11 +12,7 @@ msgstr ""
 "Language-Code: en\n"
 "Language-Name: English\n"
 "Preferred-Encodings: utf-8 latin1\n"
-"Domain: collective.clamav\n"
-
-#: ../browser/controlpanel.py:10
-msgid ""
-msgstr ""
+"Domain: DOMAIN\n"
 
 #: ../interfaces.py:32
 msgid "Choose whether clamd is accessible through local UNIX sockets or network."
@@ -96,9 +89,9 @@ msgstr ""
 #. Default: "There was an error while checking the file for viruses: Please contact your system administrator."
 #: ../validator.py:95
 msgid "error_while_scanning"
-msgstr ""
+msgstr "Bei der Überprüfung der Datei auf Viren ist ein Fehler aufgetreten: Bitte wenden Sie sich an Ihren Systemadministrator."
 
 #. Default: "Validation failed, file is virus-infected. (${result})"
 #: ../validator.py:100
 msgid "validation_failed"
-msgstr ""
+msgstr "Validierung fehlgeschlagen, Datei ist vireninfiziert. (${result})"
