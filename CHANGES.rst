@@ -14,6 +14,10 @@ Changelog
   and use it in validators (this saves memory doing scans) [djowett-ftw]
 - Copy new logic for archetypes validator to z3cform validator so tests pass
   (not tested manually) [djowett-ftw]
+- Add logging of scan results to separate 'collective.clamav.log' (rotating)
+  logfile.  [djowett-ftw]
+- Setup translations, and translate some error messages to German.
+  [djowett-ftw]
 
 
 2.0a2 (2016-09-12)
