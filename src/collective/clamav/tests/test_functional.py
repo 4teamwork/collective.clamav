@@ -4,6 +4,7 @@ from StringIO import StringIO
 
 from collective.clamav.interfaces import IAVScannerSettings
 from collective.clamav.testing import EICAR
+from collective.clamav.testing import AVMOCK_AT_FUNCTIONAL_TESTING
 from collective.clamav.testing import AVMOCK_DX_FUNCTIONAL_TESTING
 from collective.clamav import tests
 
@@ -23,9 +24,7 @@ def getFileData(filename):
     return open(filename, 'r').read()
 
 
-class TestDexterityFunctional(unittest.TestCase):
-
-    layer = AVMOCK_DX_FUNCTIONAL_TESTING
+class BaseTestCase(unittest.TestCase):
 
     def setUp(self):
         self.portal = self.layer['portal']
@@ -47,6 +46,54 @@ class TestDexterityFunctional(unittest.TestCase):
         setRoles(self.portal, TEST_USER_ID, ['Member'])
         from plone.protect import auto
         auto.CSRF_DISABLED = False
+
+
+class TestArchetypesFunctional(BaseTestCase):
+
+    layer = AVMOCK_AT_FUNCTIONAL_TESTING
+
+    def test_atvirusfile(self):
+        # Test if a virus-infected file gets caught by the validator
+        self.browser.open(self.portal.absolute_url()+'/virus-folder')
+        self.browser.getLink(url='createObject?type_name=File').click()
+        control = self.browser.getControl(name='file_file')
+        control.filename = 'virus.txt'
+        control.value = StringIO(EICAR)
+        self.browser.getControl('Save').click()
+
+        self.failIf('Eicar-Test-Signature FOUND' not in self.browser.contents)
+
+        # And let's see if a clean file passes...
+        control = self.browser.getControl(name='file_file')
+        control.filename = 'nonvirus.txt'
+        control.value = StringIO('Not a virus')
+        self.browser.getControl('Save').click()
+        self.assertTrue('Changes saved' in self.browser.contents)
+
+    def test_atvirusimage(self):
+        # Test if a virus-infected image gets caught by the validator
+        image_data = getFileData('image.png')
+        self.browser.open(self.portal.absolute_url()+'/virus-folder')
+        self.browser.getLink(url='createObject?type_name=Image').click()
+        control = self.browser.getControl(name='image_file')
+        control.filename = 'virus.png'
+        control.value = StringIO(image_data + EICAR)
+        self.browser.getControl('Save').click()
+
+        self.assertFalse('Changes saved' in self.browser.contents)
+        self.assertTrue('Eicar-Test-Signature FOUND' in self.browser.contents)
+
+        # And let's see if a clean file passes...
+        control = self.browser.getControl(name='image_file')
+        control.filename = 'nonvirus.png'
+        control.value = StringIO(image_data)
+        self.browser.getControl('Save').click()
+        self.assertTrue('Changes saved' in self.browser.contents)
+
+
+class TestDexterityFunctional(BaseTestCase):
+
+    layer = AVMOCK_DX_FUNCTIONAL_TESTING
 
     def test_dxvirusfile(self):
         # Test if a virus-infected file gets caught by the validator

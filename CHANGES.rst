@@ -6,6 +6,14 @@ Changelog
 
 - Add Plone 4.3 compatability. [djowett-ftw]
 - Add a setting to disable virus scanning (Defaults to true). [djowett-ftw]
+- Use a previous scan result from the same request whether or not it passed
+  [djowett-ftw]
+- Add tests for AT validator [djowett-ftw]
+- Cache scan results using annotations on the request [djowett-ftw]
+- Add a 'scanStream' method to IValidator / ClamavValidator
+  and use it in validators (this saves memory doing scans) [djowett-ftw]
+- Copy new logic for archetypes validator to z3cform validator so tests pass
+  (not tested manually) [djowett-ftw]
 
 
 2.0a2 (2016-09-12)

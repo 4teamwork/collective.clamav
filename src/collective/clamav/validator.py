@@ -1,19 +1,23 @@
 # -*- coding: utf-8 -*-
 import logging
 
-import Globals
 from Products.validation.interfaces.IValidator import IValidator
 from plone.registry.interfaces import IRegistry
+from six import BytesIO
+from zope.annotation.interfaces import IAnnotations
 from zope.component import getUtility
+from zope.globalrequest import getRequest
 from zope.interface import implements, Invalid
+
 from collective.clamav.interfaces import IAVScanner
 from collective.clamav.scanner import ScanError
 from collective.clamav.interfaces import IAVScannerSettings
 
 logger = logging.getLogger('collective.clamav')
+SCAN_RESULT_KEY = 'collective.clamav.scan_result'
 
 
-def _scanBuffer(buffer):
+def scanStream(stream):
 
     registry = getUtility(IRegistry)
     settings = registry.forInterface(IAVScannerSettings, check=False)
@@ -22,17 +26,20 @@ def _scanBuffer(buffer):
     scanner = getUtility(IAVScanner)
 
     if settings.clamav_connection == 'net':
-        result = scanner.scanBuffer(
-            buffer, 'net',
+        result = scanner.scanStream(
+            stream, 'net',
             host=settings.clamav_host,
             port=int(settings.clamav_port),
             timeout=float(settings.clamav_timeout))
     else:
-        result = scanner.scanBuffer(buffer, 'socket',
+        result = scanner.scanStream(stream, 'socket',
                                     socketpath=settings.clamav_socket,
                                     timeout=float(settings.clamav_timeout))
-
     return result
+
+
+def _scanBuffer(buffer):
+    return scanStream(BytesIO(buffer))
 
 
 class ClamavValidator:
@@ -44,44 +51,49 @@ class ClamavValidator:
         self.name = name
 
     def __call__(self, value, *args, **kwargs):
-        if hasattr(value, 'getBlob'):
+        # Get a previous scan result on this REQUEST if there is one - to
+        # avoid scanning the same upload twice.
+        request = kwargs['REQUEST']
+        if not request:
+            # Not very modern, but plone.restapi's DeserializeFromJson doesn't
+            # pass the request object to archetype validators
+            request = getRequest()
+        annotations = IAnnotations(request)
+        scan_result = annotations.get(SCAN_RESULT_KEY, None)
+        if scan_result is not None:
+            return scan_result
+
+        if hasattr(value, 'seek'):
+            # when submitted a new 'value' is a
+            # 'ZPublisher.HTTPRequest.FileUpload'
+            filelike = value
+        elif hasattr(value, 'getBlob'):
             # the value can be a plone.app.blob.field.BlobWrapper
             # in which case we open the blob file to provide a file interface
             # as used for FileUpload
-            file_value = value.getBlob().open()
+            filelike = value.getBlob().open()
+        elif value:
+            filelike = BytesIO(value)
         else:
-            file_value = value
-
-        if hasattr(file_value, 'seek'):
-            # when submitted a new 'file_value' is a
-            # 'ZPublisher.HTTPRequest.FileUpload'
-
-            if getattr(value, '_validate_isVirusFree', False):
-                # validation is called multiple times for the same file upload
-                return True
-
-            file_value.seek(0)
-            # TODO this reads the entire file into memory, there should be
-            # a smarter way to do this
-            content = file_value.read()
-            result = ''
-            try:
-                result = _scanBuffer(content)
-            except ScanError as e:
-                logger.error('ScanError %s on %s.' % (e, file_value.filename))
-                return "There was an error while checking the file for " \
-                       "viruses: Please contact your system administrator."
-
-            if result:
-                return "Validation failed, file is virus-infected. (%s)" % \
-                       (result)
-            else:
-                # mark the file upload instance as already checked
-                value._validate_isVirusFree = True
-                return True
-        else:
-            # if we kept existing file
+            # value is falsy - assume we kept existing file
             return True
+
+        filelike.seek(0)
+        result = ''
+        try:
+            result = scanStream(filelike)
+        except ScanError as e:
+            logger.error('ScanError %s on %s.' % (e, filelike.filename))
+            return "There was an error while checking the file for " \
+                   "viruses: Please contact your system administrator."
+
+        if result:
+            annotations[SCAN_RESULT_KEY] = (
+                "Validation failed, file is virus-infected. (%s)" % result
+            )
+        else:
+            annotations[SCAN_RESULT_KEY] = True
+        return annotations[SCAN_RESULT_KEY]
 
 
 try:
@@ -99,15 +111,32 @@ else:
         def validate(self, value):
             super(Z3CFormclamavValidator, self).validate(value)
 
-            if getattr(value, '_validate_isVirusFree', False) or value is None:
-                # validation is called multiple times for the same file upload
-                return
+            # Get a previous scan result on this REQUEST if there is one - to
+            # avoid scanning the same upload twice.
+            annotations = IAnnotations(self.request)
+            scan_result = annotations.get(SCAN_RESULT_KEY, None)
+            if scan_result is not None:
+                return scan_result
 
-            # TODO this reads the entire file into memory, there should be
-            # a smarter way to do this
+            if hasattr(value, 'seek'):
+                # when submitted a new 'value' is a
+                # 'ZPublisher.HTTPRequest.FileUpload'
+                filelike = value
+            elif hasattr(value, 'open'):
+                # the value can be a NamedBlobFile / NamedBlobImage
+                # in which case we open the blob file to provide a file interface
+                # as used for FileUpload
+                filelike = value.open()
+            elif value:
+                filelike = BytesIO(value)
+            else:
+                # value is falsy - assume we kept existing file
+                return True
+
+            filelike.seek(0)
             result = ''
             try:
-                result = _scanBuffer(value.data)
+                result = scanStream(filelike)
             except ScanError as e:
                 logger.error('ScanError %s on %s.' % (e, value.filename))
                 raise Invalid("There was an error while checking "
@@ -115,12 +144,13 @@ else:
                               "contact your system administrator.")
 
             if result:
-                raise Invalid("Validation failed, file "
-                              "is virus-infected. (%s)" %
-                              (result))
+                annotations[SCAN_RESULT_KEY] = (
+                    "Validation failed, file is virus-infected. (%s)" % result
+                )
+                raise Invalid(annotations[SCAN_RESULT_KEY])
             else:
-                # mark the file instance as already checked
-                value._validate_isVirusFree = True
+                annotations[SCAN_RESULT_KEY] = True
+                return True
 
     validator.WidgetValidatorDiscriminators(Z3CFormclamavValidator,
                                             field=INamedField,

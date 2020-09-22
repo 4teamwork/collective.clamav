@@ -6,17 +6,16 @@ from plone.app.testing import FunctionalTesting
 from plone.app.testing import IntegrationTesting
 from plone.app.testing import PloneSandboxLayer
 from plone.app.testing import PLONE_FIXTURE
-from plone.testing import z2
-
-import collective.clamav
-
 from plone.app.testing import TEST_USER_ID
 from plone.app.testing import setRoles
+from plone.testing import z2
+from six import BytesIO
 from zope.component import getGlobalSiteManager
 from zope.configuration import xmlconfig
 from zope.interface import implements
 
 from collective.clamav.interfaces import IAVScanner
+import collective.clamav
 
 
 class CollectiveClamavLayer(PloneSandboxLayer):
@@ -73,12 +72,17 @@ class MockAVScanner(object):
         """
         return True
 
+    def scanStream(self, stream, type, **kwargs):
+        """
+        """
+        if EICAR in stream.read():
+            return 'Eicar-Test-Signature FOUND'
+        return None
+
     def scanBuffer(self, buffer, type, **kwargs):
         """
         """
-        if EICAR in buffer:
-            return 'Eicar-Test-Signature FOUND'
-        return None
+        return self.scanStream(BytesIO(buffer), type, **kwargs)
 
 
 class AVFixture(PloneSandboxLayer):
